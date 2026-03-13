@@ -1,17 +1,13 @@
+.PHONY: build upload monitor clean
 
-### BOARD_TAG & BOARD_SUB
-BOARD_TAG = uno
-MONITOR_PORT = /dev/ttyUSB0
-# ARDUINO_LIBS  = Adafruit_NeoPixel Adafruit_NeoMatrix Adafruit_GFX
+build:
+	uv run pio run
 
-### USER_LIB_PATH
-### Path to where the your project's libraries are stored.
-USER_LIB_PATH = ./lib
+upload:
+	uv run pio run -t upload
 
-ARDMK_DIR = ./lib/Arduino-Makefile
+monitor:
+	uv run pio device monitor -b 9600
 
-### Do not touch - the path to Arduino.mk, inside the ARDMK_DIR
-include $(ARDMK_DIR)/Arduino.mk
-
-install:
-	./script/update-or-clone.sh deps.txt
+clean:
+	uv run pio run -t clean
