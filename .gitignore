@@ -4,3 +4,4 @@ build-uno
 __pycache__
 .cpcache
 .pio
+compile_commands.json
