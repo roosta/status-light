@@ -7,7 +7,7 @@ upload:
 	uv run pio run -t upload
 
 monitor:
-	uv run pio device monitor -b 9600
+	uv run pio device monitor -b 115200
 
 clean:
 	uv run pio run -t clean
