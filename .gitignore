@@ -6,3 +6,4 @@ __pycache__
 .pio
 *.plist
 compile_commands.json
+*.egg-info
