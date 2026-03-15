@@ -24,9 +24,16 @@ def apply_brightness(r, g, b, brightness):
 
 def expand_pixels(pixels):
     """Expand pixels to full LED_COUNT list, flattening 4x4 grids."""
-    # Flatten 2D (4x4) grid into a flat list
+    # Flatten 2D (4x4) grid into a flat list, remapping for serpentine wiring.
+    # Odd rows run right-to-left on the physical strip, so we reverse them when
+    # converting from a visual grid to strip indices.
     if pixels and isinstance(pixels[0], list):
-        pixels = [cell for row in pixels for cell in row]
+        flat = [None] * 16
+        for row in range(4):
+            for col in range(4):
+                strip_idx = (3 - row) * 4 + ((3 - col) if row % 2 == 1 else col)
+                flat[strip_idx] = pixels[row][col]
+        pixels = flat
 
     # Normalize None / missing entries to black/off
     blank = {"r": 0, "g": 0, "b": 0, "brightness": 0.0}
