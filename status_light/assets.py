@@ -1,3 +1,6 @@
+from pprint import pprint
+
+# Predefined colors
 COLORS = {
     "red":         {"r": 255, "g": 0,   "b": 0},
     "pink":        {"r": 160, "g": 20,  "b": 30},
@@ -11,17 +14,61 @@ COLORS = {
     "light-green": {"r": 150, "g": 200, "b": 0}
 }
 
+
+# ── pixel helpers ────────────────────────────────────────────────────────────
+
+def px(color_name: str, brightness: float = 1.0) -> dict:
+    """Return a pixel dict for a named color."""
+    c = COLORS[color_name]
+    return {**c, "brightness": brightness}
+
+_ = {"r": 0, "g": 0, "b": 0, "brightness": 0.0}   # off / blank cell
+
+# ── named icons (4x4 grids laid out visually) ─────────────────────────────────
+
+NAMED_ICONS = {
+    # ♥ approximated heart
+    "heart": [
+        _,           px("red"),  px("red"),  _,
+        px("red"),   px("red"),  px("red"),  px("red"),
+        px("red"),   px("red"),  px("red"),  px("red"),
+        _,           px("red"),  px("red"),  _,
+    ],
+    # + cross
+    "cross": [
+        _,            px("green"), px("green"), _,
+        px("green"),  px("green"), px("green"), px("green"),
+        px("green"),  px("green"), px("green"), px("green"),
+        _,            px("green"), px("green"), _,
+    ],
+    # □ hollow border
+    "border": [
+        px("blue"), px("blue"), px("blue"), px("blue"),
+        px("blue"), _,          _,          px("blue"),
+        px("blue"), _,          _,          px("blue"),
+        px("blue"), px("blue"), px("blue"), px("blue"),
+    ],
+    # ✕ diagonal X
+    "x-mark": [
+        px("yellow"), _,            _,            px("yellow"),
+        _,            px("yellow"), px("yellow"), _,
+        _,            px("yellow"), px("yellow"), _,
+        px("yellow"), _,            _,            px("yellow"),
+    ],
+    # four corners only
+    "corners": [
+        px("white"), _, _, px("white"),
+        _,           _, _, _,
+        _,           _, _, _,
+        px("white"), _, _, px("white"),
+    ],
+}
+
 # ── per-cell animation helpers ───────────────────────────────────────────────
 
 def _grid_frame(lit_indices, color):
     """Build a flat 16-pixel frame; lit indices use `color`, rest are off."""
     return [color if i in lit_indices else _ for i in range(16)]
-
-# Clockwise spiral from physical top-left inward
-_SPIRAL_ORDER = [12, 13, 14, 15, 8, 7, 0, 1, 2, 3, 4, 11, 10, 9, 6, 5]
-
-# Left-to-right, top-to-bottom fill in physical space
-_SNAKE_ORDER  = [12, 13, 14, 15, 11, 10, 9, 8, 4, 5, 6, 7, 3, 2, 1, 0]
 
 # Physical column -> strip indices (left=0, right=3)
 _PHYSICAL_COLS = [
@@ -39,7 +86,21 @@ _PHYSICAL_ROWS = [
     { 0,  1,  2,  3},  # row 3 (bottom)
 ]
 
+# Clockwise spiral from physical top-left inward
+_SPIRAL_ORDER = [12, 13, 14, 15, 8, 7, 0, 1, 2, 3, 4, 11, 10, 9, 6, 5]
+
+# Left-to-right, top-to-bottom fill in physical space
+_SNAKE_ORDER  = [12, 13, 14, 15, 11, 10, 9, 8, 4, 5, 6, 7, 3, 2, 1, 0]
+
 NAMED_ANIMATIONS = {
+    "notification": lambda fps, loop, color=None: {
+        "type": "animation",
+        "fps": fps,
+        "loop": loop,
+        "frames": [
+            _grid_frame(_PHYSICAL_COLS[0], px(color or "cyan"))
+        ],
+    },
     "pulse": lambda fps, loop, color=None: {
         "type": "animation",
         "fps": fps,
@@ -129,55 +190,4 @@ NAMED_ANIMATIONS = {
         ],
     },
 }
-
-
-# ── pixel helpers ────────────────────────────────────────────────────────────
-
-def px(color_name: str, brightness: float = 1.0) -> dict:
-    """Return a pixel dict for a named color."""
-    c = COLORS[color_name]
-    return {**c, "brightness": brightness}
-
-_ = {"r": 0, "g": 0, "b": 0, "brightness": 0.0}   # off / blank cell
-
-# ── named icons (4x4 grids laid out visually) ─────────────────────────────────
-
-NAMED_ICONS = {
-    # ♥ approximated heart
-    "heart": [
-        _,           px("red"),  px("red"),  _,
-        px("red"),   px("red"),  px("red"),  px("red"),
-        px("red"),   px("red"),  px("red"),  px("red"),
-        _,           px("red"),  px("red"),  _,
-    ],
-    # + cross
-    "cross": [
-        _,            px("green"), px("green"), _,
-        px("green"),  px("green"), px("green"), px("green"),
-        px("green"),  px("green"), px("green"), px("green"),
-        _,            px("green"), px("green"), _,
-    ],
-    # □ hollow border
-    "border": [
-        px("blue"), px("blue"), px("blue"), px("blue"),
-        px("blue"), _,          _,          px("blue"),
-        px("blue"), _,          _,          px("blue"),
-        px("blue"), px("blue"), px("blue"), px("blue"),
-    ],
-    # ✕ diagonal X
-    "x-mark": [
-        px("yellow"), _,            _,            px("yellow"),
-        _,            px("yellow"), px("yellow"), _,
-        _,            px("yellow"), px("yellow"), _,
-        px("yellow"), _,            _,            px("yellow"),
-    ],
-    # four corners only
-    "corners": [
-        px("white"), _, _, px("white"),
-        _,           _, _, _,
-        _,           _, _, _,
-        px("white"), _, _, px("white"),
-    ],
-}
-
 
