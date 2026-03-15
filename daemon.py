@@ -23,11 +23,18 @@ def apply_brightness(r, g, b, brightness):
 
 
 def expand_pixels(pixels):
-    """Expand single-pixel shorthand to full LED_COUNT list."""
+    """Expand pixels to full LED_COUNT list, flattening 4x4 grids."""
+    # Flatten 2D (4x4) grid into a flat list
+    if pixels and isinstance(pixels[0], list):
+        pixels = [cell for row in pixels for cell in row]
+
+    # Normalize None / missing entries to black/off
+    blank = {"r": 0, "g": 0, "b": 0, "brightness": 0.0}
+    pixels = [p if p is not None else blank for p in pixels]
+
     if len(pixels) == 1:
         pixels = pixels * LED_COUNT
     elif len(pixels) < LED_COUNT:
-        blank = {"r": 0, "g": 0, "b": 0, "brightness": 0.0}
         pixels = pixels + [blank] * (LED_COUNT - len(pixels))
     return pixels[:LED_COUNT]
 
@@ -52,6 +59,9 @@ class StatusLight:
         except serial.SerialException as e:
             self._connected = False
             log.warning(f"Serial not available: {e}")
+
+    async def clear(self):
+        await self._send(b"C\n")
 
     def _write(self, data: bytes):
         if not self._connected or self.ser is None or not self.ser.is_open:
