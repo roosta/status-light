@@ -55,9 +55,6 @@ class StatusLight:
         cmd = "F:" + ",".join(parts) + "\n"
         await self._send(cmd.encode())
 
-    async def clear(self):
-        await self._send(b"C\n")
-
     def _cancel_animation(self):
         if self._anim_task and not self._anim_task.done():
             self._anim_task.cancel()
@@ -91,9 +88,6 @@ class StatusLight:
                 self._run_animation(frames, fps, loop)
             )
 
-        elif ctype == "clear":
-            await self.clear()
-
     async def handle_client(self, reader, writer):
         addr = writer.get_extra_info("peername") or "client"
         log.info(f"Connection from {addr}")
@@ -126,14 +120,27 @@ class StatusLight:
         log.info(f"Daemon listening on {SOCKET_PATH}")
 
         def _shutdown():
-            log.info("Shutting down")
+            log.info("Shutting down, please wait...")
+            self._cancel_animation()
             server.close()
+            if os.path.exists(SOCKET_PATH):
+                os.unlink(SOCKET_PATH)
 
         self._loop.add_signal_handler(signal.SIGTERM, _shutdown)
         self._loop.add_signal_handler(signal.SIGINT, _shutdown)
 
-        async with server:
-            await server.serve_forever()
+        try:
+            async with server:
+                try:
+                    await server.serve_forever()
+                except asyncio.CancelledError:
+                    log.info("Server stopped cleanly")
+        finally:
+            if self.ser.is_open:
+                self.ser.close()
+                log.info("Serial port closed")
+            self.executor.shutdown(wait=False)
+            log.info("Shutdown complete")
 
 
 def main():
