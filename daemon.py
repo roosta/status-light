@@ -50,11 +50,11 @@ class StatusLight:
     def __init__(self, port=SERIAL_PORT, baud=BAUD_RATE):
         self._port = port
         self._baud = baud
-        self.ser = None
+        self.ser: serial.Serial | None = None
         self._connected = False
         self.executor = ThreadPoolExecutor(max_workers=1)
         self._anim_task = None
-        self._loop = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._udev_observer = None
         self._try_connect()
 
@@ -86,6 +86,7 @@ class StatusLight:
                 self._loop.call_soon_threadsafe(self._cancel_animation)
 
     async def _send(self, data: bytes):
+        assert self._loop is not None
         await self._loop.run_in_executor(self.executor, self._write, data)
 
     async def send_frame(self, pixels):
@@ -115,12 +116,15 @@ class StatusLight:
         if device.action == 'remove' and self._connected:
             self._connected = False
             try:
-                self.ser.close()
+                if self.ser is not None:
+                    self.ser.close()
             except Exception:
                 pass
-            self._loop.call_soon_threadsafe(self._handle_disconnect)
+            if self._loop is not None:
+                self._loop.call_soon_threadsafe(self._handle_disconnect)
         elif device.action == 'add' and not self._connected:
-            asyncio.run_coroutine_threadsafe(self._do_reconnect(), self._loop)
+            if self._loop is not None:
+                asyncio.run_coroutine_threadsafe(self._do_reconnect(), self._loop)
 
     def _handle_disconnect(self):
         log.warning(f"Device disconnected: {self._port}")
@@ -128,6 +132,7 @@ class StatusLight:
 
     async def _do_reconnect(self):
         log.info(f"Device appeared at {self._port}, reconnecting...")
+        assert self._loop is not None
         await self._loop.run_in_executor(self.executor, self._try_connect)
 
     async def _run_animation(self, frames, fps, loop):
@@ -143,7 +148,12 @@ class StatusLight:
             pass
 
     async def handle_command(self, cmd: dict):
-        self._cancel_animation()
+        if self._anim_task and not self._anim_task.done():
+            self._anim_task.cancel()
+            try:
+                await self._anim_task
+            except asyncio.CancelledError:
+                pass
         ctype = cmd.get("type", "frame")
 
         if ctype == "frame":
