@@ -1,7 +1,7 @@
 [project]
 name = "status-light"
 version = "0.1.0"
-description = "Add your description here"
+description = "Daemon and CLI program for a 4x4 NeoPixel LED matrix framed and hanging next to my PC."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
