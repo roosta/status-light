@@ -18,6 +18,18 @@ COLORS = {
     "cyan":   {"r": 0,   "g": 220, "b": 220},
 }
 
+# ── per-cell animation helpers ───────────────────────────────────────────────
+
+def _grid_frame(lit_indices, color):
+    """Build a flat 16-pixel frame; lit indices use `color`, rest are off."""
+    return [color if i in lit_indices else _ for i in range(16)]
+
+# Clockwise spiral from outer ring inward
+_SPIRAL_ORDER = [0, 1, 2, 3, 7, 11, 15, 14, 13, 12, 8, 4, 5, 6, 10, 9]
+
+# Boustrophedon (snake) row traversal
+_SNAKE_ORDER  = [0, 1, 2, 3, 7, 6, 5, 4, 8, 9, 10, 11, 15, 14, 13, 12]
+
 NAMED_ANIMATIONS = {
     "pulse-red": lambda fps, loop: {
         "type": "animation",
@@ -56,6 +68,62 @@ NAMED_ANIMATIONS = {
                 COLORS["red"], COLORS["orange"], COLORS["yellow"],
                 COLORS["green"], COLORS["cyan"], COLORS["blue"], COLORS["purple"],
             ]
+        ],
+    },
+    # single column sweeps left → right
+    "wipe-right": lambda fps, loop: {
+        "type": "animation", "fps": fps, "loop": loop,
+        "frames": [
+            _grid_frame({r * 4 + col for r in range(4)}, px("cyan"))
+            for col in range(4)
+        ],
+    },
+    # single column sweeps right → left
+    "wipe-left": lambda fps, loop: {
+        "type": "animation", "fps": fps, "loop": loop,
+        "frames": [
+            _grid_frame({r * 4 + col for r in range(4)}, px("cyan"))
+            for col in range(3, -1, -1)
+        ],
+    },
+    # single row sweeps top → bottom
+    "wipe-down": lambda fps, loop: {
+        "type": "animation", "fps": fps, "loop": loop,
+        "frames": [
+            _grid_frame({row * 4 + c for c in range(4)}, px("purple"))
+            for row in range(4)
+        ],
+    },
+    # single row sweeps bottom → top
+    "wipe-up": lambda fps, loop: {
+        "type": "animation", "fps": fps, "loop": loop,
+        "frames": [
+            _grid_frame({row * 4 + c for c in range(4)}, px("purple"))
+            for row in range(3, -1, -1)
+        ],
+    },
+    # alternating checkerboard flash
+    "checkerboard": lambda fps, loop: {
+        "type": "animation", "fps": fps, "loop": loop,
+        "frames": [
+            _grid_frame({i for i in range(16) if (i // 4 + i % 4) % 2 == 0}, px("white")),
+            _grid_frame({i for i in range(16) if (i // 4 + i % 4) % 2 == 1}, px("white")),
+        ],
+    },
+    # clockwise spiral fill inward
+    "spiral": lambda fps, loop: {
+        "type": "animation", "fps": fps, "loop": loop,
+        "frames": [
+            _grid_frame(set(_SPIRAL_ORDER[:i + 1]), px("cyan"))
+            for i in range(16)
+        ],
+    },
+    # snake (boustrophedon) fill
+    "snake": lambda fps, loop: {
+        "type": "animation", "fps": fps, "loop": loop,
+        "frames": [
+            _grid_frame(set(_SNAKE_ORDER[:i + 1]), px("green"))
+            for i in range(16)
         ],
     },
 }
