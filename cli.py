@@ -7,15 +7,16 @@ import sys
 SOCKET_PATH = "/tmp/status-light.sock"
 
 COLORS = {
-    "red":    {"r": 255, "g": 0,   "b": 0},
-    "pink":   {"r": 160, "g": 20,  "b": 30},
-    "green":  {"r": 0,   "g": 255, "b": 0},
-    "blue":   {"r": 0,   "g": 0,   "b": 255},
-    "yellow": {"r": 255, "g": 200, "b": 0},
-    "white":  {"r": 255, "g": 255, "b": 255},
-    "purple": {"r": 180, "g": 0,   "b": 180},
-    "orange": {"r": 255, "g": 80,  "b": 0},
-    "cyan":   {"r": 0,   "g": 220, "b": 220},
+    "red":         {"r": 255, "g": 0,   "b": 0},
+    "pink":        {"r": 160, "g": 20,  "b": 30},
+    "green":       {"r": 10,  "g": 230, "b": 30},
+    "blue":        {"r": 0,   "g": 50,  "b": 255},
+    "yellow":      {"r": 220, "g": 200, "b": 0},
+    "white":       {"r": 255, "g": 255, "b": 255},
+    "purple":      {"r": 180, "g": 0,   "b": 180},
+    "orange":      {"r": 255, "g": 80,  "b": 0},
+    "cyan":        {"r": 10,  "g": 100, "b": 200},
+    "light-green": {"r": 150, "g": 200, "b": 0}
 }
 
 # ── per-cell animation helpers ───────────────────────────────────────────────
@@ -207,7 +208,7 @@ def main():
     fp_src.add_argument("--name", choices=NAMED_ICONS.keys(),
                         help="Named icon")
     fp_src.add_argument("--file", metavar="FILE",
-                        help="Path to JSON icon file ({\"pixels\": [...]})") 
+                        help="Path to JSON icon file ({\"pixels\": [...]})")
     fp.add_argument("--brightness", type=float, default=1.0, metavar="0.0-1.0",
                     help="Brightness override for solid-color mode")
 
