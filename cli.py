@@ -121,9 +121,10 @@ def main():
 
     try:
         response = send_command(cmd)
-        print(response)
         if response.startswith("error"):
+            print(response, file=sys.stderr)
             sys.exit(1)
+        print(response)
     except (ConnectionRefusedError, FileNotFoundError):
         print("error: daemon not running — start with: python daemon.py", file=sys.stderr)
         sys.exit(1)
