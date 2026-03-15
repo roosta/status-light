@@ -33,15 +33,38 @@ def expand_pixels(pixels):
 
 class StatusLight:
     def __init__(self, port=SERIAL_PORT, baud=BAUD_RATE):
-        self.ser = serial.Serial(port, baud, timeout=1)
+        self._port = port
+        self._baud = baud
+        self.ser = None
+        self._connected = False
         self.executor = ThreadPoolExecutor(max_workers=1)
         self._anim_task = None
         self._loop = None
-        log.info(f"Serial connected: {port} @ {baud}")
+        self._try_connect()
+
+    def _try_connect(self):
+        try:
+            self.ser = serial.Serial(self._port, self._baud, timeout=1)
+            self._connected = True
+            log.info(f"Serial connected: {self._port} @ {self._baud}")
+        except serial.SerialException as e:
+            self._connected = False
+            log.warning(f"Serial not available: {e}")
 
     def _write(self, data: bytes):
-        if self.ser.is_open:
+        if not self._connected or self.ser is None or not self.ser.is_open:
+            return
+        try:
             self.ser.write(data)
+        except serial.SerialException as e:
+            log.warning(f"Serial write failed (disconnected): {e}")
+            self._connected = False
+            try:
+                self.ser.close()
+            except Exception:
+                pass
+            if self._loop:
+                self._loop.call_soon_threadsafe(self._cancel_animation)
 
     async def _send(self, data: bytes):
         await self._loop.run_in_executor(self.executor, self._write, data)
@@ -58,6 +81,13 @@ class StatusLight:
     def _cancel_animation(self):
         if self._anim_task and not self._anim_task.done():
             self._anim_task.cancel()
+
+    async def _reconnect_loop(self):
+        while True:
+            await asyncio.sleep(2)
+            if not self._connected and os.path.exists(self._port):
+                log.info(f"Device appeared at {self._port}, reconnecting...")
+                await self._loop.run_in_executor(self.executor, self._try_connect)
 
     async def _run_animation(self, frames, fps, loop):
         delay = 1.0 / max(fps, 0.1)
@@ -111,6 +141,7 @@ class StatusLight:
 
     async def run(self):
         self._loop = asyncio.get_running_loop()
+        asyncio.create_task(self._reconnect_loop())
 
         if os.path.exists(SOCKET_PATH):
             os.unlink(SOCKET_PATH)
@@ -136,7 +167,7 @@ class StatusLight:
                 except asyncio.CancelledError:
                     log.info("Server stopped cleanly")
         finally:
-            if self.ser.is_open:
+            if self.ser is not None and self.ser.is_open:
                 self.ser.close()
                 log.info("Serial port closed")
             self.executor.shutdown(wait=False)
