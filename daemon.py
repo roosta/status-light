@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import signal
+import pyudev
 import serial
 from concurrent.futures import ThreadPoolExecutor
 
@@ -40,6 +41,7 @@ class StatusLight:
         self.executor = ThreadPoolExecutor(max_workers=1)
         self._anim_task = None
         self._loop = None
+        self._udev_observer = None
         self._try_connect()
 
     def _try_connect(self):
@@ -82,12 +84,34 @@ class StatusLight:
         if self._anim_task and not self._anim_task.done():
             self._anim_task.cancel()
 
-    async def _reconnect_loop(self):
-        while True:
-            await asyncio.sleep(2)
-            if not self._connected and os.path.exists(self._port):
-                log.info(f"Device appeared at {self._port}, reconnecting...")
-                await self._loop.run_in_executor(self.executor, self._try_connect)
+    def _start_udev_monitor(self):
+        context = pyudev.Context()
+        monitor = pyudev.Monitor.from_netlink(context)
+        monitor.filter_by('tty')
+        self._udev_observer = pyudev.MonitorObserver(monitor, callback=self._udev_event)
+        self._udev_observer.start()
+        log.info("udev monitor started")
+
+    def _udev_event(self, device):
+        if device.device_node != self._port:
+            return
+        if device.action == 'remove' and self._connected:
+            self._connected = False
+            try:
+                self.ser.close()
+            except Exception:
+                pass
+            self._loop.call_soon_threadsafe(self._handle_disconnect)
+        elif device.action == 'add' and not self._connected:
+            asyncio.run_coroutine_threadsafe(self._do_reconnect(), self._loop)
+
+    def _handle_disconnect(self):
+        log.warning(f"Device disconnected: {self._port}")
+        self._cancel_animation()
+
+    async def _do_reconnect(self):
+        log.info(f"Device appeared at {self._port}, reconnecting...")
+        await self._loop.run_in_executor(self.executor, self._try_connect)
 
     async def _run_animation(self, frames, fps, loop):
         delay = 1.0 / max(fps, 0.1)
@@ -128,6 +152,10 @@ class StatusLight:
                     continue
                 try:
                     cmd = json.loads(line)
+                    if not self._connected:
+                        writer.write(b"error: device not connected\n")
+                        await writer.drain()
+                        continue
                     await self.handle_command(cmd)
                     writer.write(b"ok\n")
                     await writer.drain()
@@ -141,7 +169,7 @@ class StatusLight:
 
     async def run(self):
         self._loop = asyncio.get_running_loop()
-        asyncio.create_task(self._reconnect_loop())
+        self._start_udev_monitor()
 
         if os.path.exists(SOCKET_PATH):
             os.unlink(SOCKET_PATH)
@@ -153,6 +181,9 @@ class StatusLight:
         def _shutdown():
             log.info("Shutting down, please wait...")
             self._cancel_animation()
+            if self._udev_observer:
+                self._udev_observer.stop()
+                self._udev_observer = None
             server.close()
             if os.path.exists(SOCKET_PATH):
                 os.unlink(SOCKET_PATH)
@@ -167,6 +198,8 @@ class StatusLight:
                 except asyncio.CancelledError:
                     log.info("Server stopped cleanly")
         finally:
+            if self._udev_observer:
+                self._udev_observer.stop()
             if self.ser is not None and self.ser.is_open:
                 self.ser.close()
                 log.info("Serial port closed")

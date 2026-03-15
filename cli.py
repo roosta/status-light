@@ -120,7 +120,10 @@ def main():
         cmd = json.loads(args.json)
 
     try:
-        print(send_command(cmd))
+        response = send_command(cmd)
+        print(response)
+        if response.startswith("error"):
+            sys.exit(1)
     except (ConnectionRefusedError, FileNotFoundError):
         print("error: daemon not running — start with: python daemon.py", file=sys.stderr)
         sys.exit(1)
