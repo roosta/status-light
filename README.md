@@ -6,7 +6,13 @@ my PC.
 
 ## Dependencies
 
-Install dependencies via `uv`
+Install as a tool via `uv` (creates `status-light` and `status-light-daemon` binaries in `~/.local/bin`):
+
+```sh
+uv tool install .
+```
+
+Alternatively, for local development:
 
 ```sh
 uv sync
@@ -33,19 +39,19 @@ make upload
 
 ```sh
 # start the daemon
-uv run daemon.py --port /dev/ttyUSB0
+status-light-daemon --port /dev/ttyUSB0
 
 # Example commands
-uv run cli.py frame red --brightness 0.5
-uv run cli.py frame green
-uv run cli.py animation --name pulse-red --loop
-uv run cli.py animation --name blink-yellow --fps 4 --loop
-uv run cli.py clear
+status-light frame red --brightness 0.5
+status-light frame green
+status-light animation --name pulse-red --loop
+status-light animation --name blink-yellow --fps 4 --loop
+status-light clear
 ```
 
 
 ```sh
-uv run cli.py animation --file my_anim.json --fps 5 --loop
+status-light animation --file my_anim.json --fps 5 --loop
 ```
 
 ```json

@@ -136,7 +136,7 @@ class StatusLight:
             await server.serve_forever()
 
 
-if __name__ == "__main__":
+def main():
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -146,3 +146,7 @@ if __name__ == "__main__":
 
     light = StatusLight(args.port, args.baud)
     asyncio.run(light.run())
+
+
+if __name__ == "__main__":
+    main()

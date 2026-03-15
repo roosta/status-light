@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python %h/src/status-light/daemon.py
+ExecStart=%h/.local/bin/status-light-daemon
 Restart=on-failure
 RestartSec=5
 
