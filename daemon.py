@@ -149,6 +149,9 @@ class StatusLight:
         if ctype == "frame":
             await self.send_frame(cmd.get("pixels", [{"r": 0, "g": 0, "b": 0}]))
 
+        elif ctype == "clear":
+            await self.clear()
+
         elif ctype == "animation":
             frames = [expand_pixels(f) for f in cmd.get("frames", [])]
             if not frames:
@@ -158,6 +161,9 @@ class StatusLight:
             self._anim_task = asyncio.create_task(
                 self._run_animation(frames, fps, loop)
             )
+
+        else:
+            log.warning(f"Unknown command type: {ctype!r}")
 
     async def handle_client(self, reader, writer):
         addr = writer.get_extra_info("peername") or "client"
