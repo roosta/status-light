@@ -3,7 +3,7 @@ import argparse
 import json
 import socket
 import sys
-from assets import NAMED_ICONS, NAMED_ANIMATIONS, COLORS
+from status_light.assets import NAMED_ICONS, NAMED_ANIMATIONS, COLORS
 
 SOCKET_PATH = "/tmp/status-light.sock"
 
