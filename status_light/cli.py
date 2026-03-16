@@ -40,6 +40,12 @@ def main():
     ap.add_argument("--color", choices=COLORS.keys(), default=None,
                     help="Override the animation color (uses per-animation default if omitted)")
 
+    # pixel
+    pp = sub.add_parser("pixel", help="Set a single pixel")
+    pp.add_argument("index", type=int, help="Pixel index (0-15)")
+    pp.add_argument("color", choices=COLORS.keys(), help="Named color")
+    pp.add_argument("--brightness", type=float, default=1.0, metavar="0.0-1.0")
+
     # clear
     sub.add_parser("clear", help="Turn off all LEDs")
 
@@ -81,6 +87,10 @@ def main():
                 "fps": args.fps,
                 "loop": args.loop,
             }
+
+    elif args.command == "pixel":
+        c = COLORS[args.color]
+        cmd = {"type": "pixel", "index": args.index, **c, "brightness": args.brightness}
 
     elif args.command == "raw":
         cmd = json.loads(args.json)

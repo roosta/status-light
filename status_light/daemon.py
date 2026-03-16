@@ -89,6 +89,11 @@ class StatusLight:
         assert self._loop is not None
         await self._loop.run_in_executor(self.executor, self._write, data)
 
+    async def send_pixel(self, idx: int, r: int, g: int, b: int, brightness: float):
+        brightness_byte = int(max(0.0, min(1.0, brightness)) * 255)
+        cmd = f"P:{idx},{r:02X}{g:02X}{b:02X},{brightness_byte}\n"
+        await self._send(cmd.encode())
+
     async def send_frame(self, pixels):
         pixels = expand_pixels(pixels)
         parts = []
@@ -173,6 +178,14 @@ class StatusLight:
             self._anim_task = asyncio.create_task(
                 self._run_animation(frames, fps, loop)
             )
+
+        elif ctype == "pixel":
+            idx = cmd.get("index", 0)
+            r = cmd.get("r", 0)
+            g = cmd.get("g", 0)
+            b = cmd.get("b", 0)
+            brightness = cmd.get("brightness", 1.0)
+            await self.send_pixel(idx, r, g, b, brightness)
 
         elif ctype == "status":
             payload = json.dumps({"connected": self._connected, "port": self._port})
