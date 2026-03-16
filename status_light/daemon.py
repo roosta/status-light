@@ -207,7 +207,11 @@ class StatusLight:
         if os.path.exists(SOCKET_PATH):
             os.unlink(SOCKET_PATH)
 
-        server = await asyncio.start_unix_server(self.handle_client, SOCKET_PATH)
+        server = await asyncio.start_unix_server(
+            self.handle_client,
+            SOCKET_PATH,
+            limit=256 * 1024  # 256 KB
+        )
         os.chmod(SOCKET_PATH, 0o600)
         log.info(f"Daemon listening on {SOCKET_PATH}")
 
