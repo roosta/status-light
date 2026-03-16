@@ -114,6 +114,26 @@ status-light frame --file my_icon.json
 ```
 
 
+### `pixel`
+
+Sets a single pixel by index, color, and brightness. The matrix is numbered
+0–15 (see [the grid layout](#json-file-formats) below).
+
+```sh
+status-light pixel <index> <color> [--brightness 0.0-1.0]
+```
+
+Examples:
+
+```sh
+status-light pixel 0 red
+status-light pixel 7 blue --brightness 0.5
+status-light pixel 15 orange --brightness 0.25
+```
+
+Available colors: `red` `green` `blue` `yellow` `white` `purple` `orange` `cyan`
+
+
 ### `animation`
 
 Plays an animation. Use `--loop` to repeat indefinitely and `--fps` to control
@@ -136,9 +156,11 @@ status-light animation --name pulse   --color blue   --loop
 status-light animation --name blink   --color green  --fps 4 --loop
 status-light animation --name spiral  --color orange --fps 14 --loop
 status-light animation --name wipe-right --color red --fps 4 --loop
+
 ```
 
 | Name | Default color | Description |
+|------|---------------|-------------|
 | `pulse` | red | Smooth brightness fade in and out |
 | `blink` | red | Hard on/off flash |
 | `rainbow` | — | Cycles through all colors (color override has no effect) |
@@ -294,6 +316,7 @@ debugging.
 ```sh
 status-light raw '{"type": "clear"}'
 status-light raw '{"type": "frame", "pixels": [{"r": 255, "g": 0, "b": 0, "brightness": 0.5}]}'
+status-light raw '{"type": "pixel", "index": 3, "r": 255, "g": 136, "b": 0, "brightness": 0.5}'
 ```
 
 
