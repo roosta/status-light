@@ -122,8 +122,8 @@ NAMED_ANIMATIONS = {
         "fps": fps,
         "loop": loop,
         "frames": (
-            [notificationIcon(i / 60, color or "green") for i in range(61)] +
-            [notificationIcon(i / 60, color or "green") for i in range(60, -1, -1)]
+            [notificationIcon(i / 30, color or "green") for i in range(31)] +
+            [notificationIcon(i / 30, color or "green") for i in range(30, -1, -1)]
         ),
     },
 
