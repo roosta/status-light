@@ -97,9 +97,17 @@ NAMED_ANIMATIONS = {
         "type": "animation",
         "fps": fps,
         "loop": loop,
-        "frames": [
-            _grid_frame(_PHYSICAL_COLS[0], px(color or "cyan"))
-        ],
+        "frames": (
+            [
+                _grid_frame(_PHYSICAL_COLS[0] | _PHYSICAL_COLS[3], px(color or "cyan")),
+                _grid_frame(_PHYSICAL_COLS[1] | _PHYSICAL_COLS[2], px(color or "cyan")),
+                _grid_frame({13, 14, 10, 9, 2, 1}, px(color or "cyan")),
+            ] +
+            [
+                _grid_frame({13, 14, 10, 9, 2, 1}, px(color or "cyan", i / 20))
+                for i in range(20, -1, -1)
+            ]
+        ),
     },
     "pulse": lambda fps, loop, color=None: {
         "type": "animation",
