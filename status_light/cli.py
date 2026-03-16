@@ -43,6 +43,9 @@ def main():
     # clear
     sub.add_parser("clear", help="Turn off all LEDs")
 
+    # status
+    sub.add_parser("status", help="Check daemon connection to the LED matrix")
+
     # raw (power-user escape hatch)
     rp = sub.add_parser("raw", help="Send raw JSON command")
     rp.add_argument("json")
@@ -51,6 +54,9 @@ def main():
 
     if args.command == "clear":
         cmd = {"type": "clear"}
+
+    elif args.command == "status":
+        cmd = {"type": "status"}
 
     elif args.command == "frame":
         if args.name:
@@ -81,6 +87,10 @@ def main():
 
     try:
         response = send_command(cmd)
+        if args.command == "status":
+            data = json.loads(response)
+            print(f"connected: {str(data['connected']).lower()}  port: {data['port']}")
+            sys.exit(0 if data["connected"] else 1)
         if response.startswith("error"):
             print(response, file=sys.stderr)
             sys.exit(1)

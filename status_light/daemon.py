@@ -165,15 +165,21 @@ class StatusLight:
         elif ctype == "animation":
             frames = [expand_pixels(f) for f in cmd.get("frames", [])]
             if not frames:
-                return
+                return None
             fps = cmd.get("fps", 10)
             loop = cmd.get("loop", False)
             self._anim_task = asyncio.create_task(
                 self._run_animation(frames, fps, loop)
             )
 
+        elif ctype == "status":
+            payload = json.dumps({"connected": self._connected, "port": self._port})
+            return payload.encode() + b"\n"
+
         else:
             log.warning(f"Unknown command type: {ctype!r}")
+
+        return None
 
     async def handle_client(self, reader, writer):
         addr = writer.get_extra_info("peername") or "client"
@@ -185,12 +191,13 @@ class StatusLight:
                     continue
                 try:
                     cmd = json.loads(line)
-                    if not self._connected:
+                    ctype = cmd.get("type", "frame")
+                    if not self._connected and ctype != "status":
                         writer.write(b"error: device not connected\n")
                         await writer.drain()
                         continue
-                    await self.handle_command(cmd)
-                    writer.write(b"ok\n")
+                    response = await self.handle_command(cmd)
+                    writer.write(response if response is not None else b"ok\n")
                     await writer.drain()
                 except (json.JSONDecodeError, KeyError) as e:
                     writer.write(f"error: {e}\n".encode())
