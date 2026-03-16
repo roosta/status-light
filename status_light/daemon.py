@@ -148,13 +148,15 @@ class StatusLight:
             pass
 
     async def handle_command(self, cmd: dict):
-        if self._anim_task and not self._anim_task.done():
-            self._anim_task.cancel()
-            try:
-                await self._anim_task
-            except asyncio.CancelledError:
-                pass
         ctype = cmd.get("type", "frame")
+
+        if ctype in ("frame", "clear", "animation"):
+            if self._anim_task and not self._anim_task.done():
+                self._anim_task.cancel()
+                try:
+                    await self._anim_task
+                except asyncio.CancelledError:
+                    pass
 
         if ctype == "frame":
             await self.send_frame(cmd.get("pixels", [{"r": 0, "g": 0, "b": 0}]))
