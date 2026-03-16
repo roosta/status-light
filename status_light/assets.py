@@ -92,23 +92,41 @@ _SPIRAL_ORDER = [12, 13, 14, 15, 8, 7, 0, 1, 2, 3, 4, 11, 10, 9, 6, 5]
 # Left-to-right, top-to-bottom fill in physical space
 _SNAKE_ORDER  = [12, 13, 14, 15, 11, 10, 9, 8, 4, 5, 6, 7, 3, 2, 1, 0]
 
+def notificationIcon(brightness: float = 1.0, color: str = "green"):
+    corner = px("blue", brightness)
+    fill   = px(color)
+    return [
+        corner, fill,   fill,   corner,
+        fill,   fill,   fill,   fill,
+        fill,   fill,   fill,   fill,
+        corner, fill,   fill,   corner,
+    ]
+
+
 NAMED_ANIMATIONS = {
-    "notification": lambda fps, loop, color=None: {
+    "exclamation": lambda fps, loop, color=None: {
         "type": "animation",
         "fps": fps,
         "loop": loop,
         "frames": (
             [
-                _grid_frame(_PHYSICAL_COLS[0] | _PHYSICAL_COLS[3], px(color or "cyan")),
-                _grid_frame(_PHYSICAL_COLS[1] | _PHYSICAL_COLS[2], px(color or "cyan")),
-                _grid_frame({13, 14, 10, 9, 2, 1}, px(color or "cyan")),
-            ] +
-            [
-                _grid_frame({13, 14, 10, 9, 2, 1}, px(color or "cyan", i / 20))
-                for i in range(20, -1, -1)
+                _grid_frame(_PHYSICAL_COLS[0] | _PHYSICAL_COLS[3], px(color or "red")),
+                _grid_frame(_PHYSICAL_COLS[1] | _PHYSICAL_COLS[2], px(color or "red")),
+                _grid_frame({13, 14, 10, 9, 2, 1}, px(color or "red")),
             ]
         ),
     },
+
+    "notify": lambda fps, loop, color=None: {
+        "type": "animation",
+        "fps": fps,
+        "loop": loop,
+        "frames": (
+            [notificationIcon(i / 60, color or "green") for i in range(61)] +
+            [notificationIcon(i / 60, color or "green") for i in range(60, -1, -1)]
+        ),
+    },
+
     "pulse": lambda fps, loop, color=None: {
         "type": "animation",
         "fps": fps,
@@ -118,6 +136,7 @@ NAMED_ANIMATIONS = {
             [[{**COLORS[color or "red"], "brightness": i / 20}] for i in range(20, -1, -1)]
         ),
     },
+
     "blink": lambda fps, loop, color=None: {
         "type": "animation",
         "fps": fps,
@@ -127,6 +146,7 @@ NAMED_ANIMATIONS = {
             [{"r": 0, "g": 0, "b": 0,   "brightness": 0.0}],
         ],
     },
+
     "rainbow": lambda fps, loop, color=None: {
         "type": "animation",
         "fps": fps,
