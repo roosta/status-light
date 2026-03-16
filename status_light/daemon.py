@@ -3,10 +3,12 @@ import asyncio
 import json
 import logging
 import os
+import random
 import signal
 import pyudev
 import serial
 from concurrent.futures import ThreadPoolExecutor
+from status_light.assets import COLORS
 
 SOCKET_PATH = "/tmp/status-light.sock"
 SERIAL_PORT = "/dev/ttyUSB0"
@@ -152,10 +154,72 @@ class StatusLight:
         except asyncio.CancelledError:
             pass
 
+    async def _run_idle_animation(self):
+        TICK        = 1 / 15   # 15 FPS
+        FADE_STEPS  = 15       # 1 s fade at 15 FPS
+        MAX_ACTIVE  = 6
+        OFF         = {"r": 0, "g": 0, "b": 0, "brightness": 0.0}
+        color_names = list(COLORS.keys())
+        states: dict = {}      # idx -> {r,g,b, phase, step, hold_ticks}
+        spawn_cooldown = 0
+
+        try:
+            while True:
+                available = [i for i in range(LED_COUNT) if i not in states]
+                if spawn_cooldown <= 0 and available and len(states) < MAX_ACTIVE:
+                    idx = random.choice(available)
+                    c   = COLORS[random.choice(color_names)]
+                    states[idx] = {
+                        "r": c["r"], "g": c["g"], "b": c["b"],
+                        "phase": "in", "step": 0,
+                        "hold_ticks": random.randint(15, 60),  # 1–4 s
+                    }
+                    spawn_cooldown = random.randint(5, 20)      # 0.3–1.3 s
+                spawn_cooldown -= 1
+
+                finished = []
+                for idx, s in states.items():
+                    if s["phase"] == "in":
+                        s["step"] += 1
+                        if s["step"] > FADE_STEPS:
+                            s["phase"] = "hold"
+                            s["step"]  = 0
+                    elif s["phase"] == "hold":
+                        s["step"] += 1
+                        if s["step"] >= s["hold_ticks"]:
+                            s["phase"] = "out"
+                            s["step"]  = FADE_STEPS
+                    elif s["phase"] == "out":
+                        s["step"] -= 1
+                        if s["step"] < 0:
+                            finished.append(idx)
+                for idx in finished:
+                    del states[idx]
+
+                frame = []
+                for i in range(LED_COUNT):
+                    if i in states:
+                        s = states[i]
+                        if s["phase"] == "in":
+                            br = s["step"] / FADE_STEPS
+                        elif s["phase"] == "hold":
+                            br = 1.0
+                        else:
+                            br = max(0.0, s["step"] / FADE_STEPS)
+                        frame.append({"r": s["r"], "g": s["g"], "b": s["b"], "brightness": br})
+                    else:
+                        frame.append(OFF)
+
+                await self.send_frame(frame)
+                await asyncio.sleep(TICK)
+
+        except asyncio.CancelledError:
+            raise
+
     async def handle_command(self, cmd: dict):
         ctype = cmd.get("type", "frame")
 
-        if ctype in ("frame", "clear", "animation"):
+        if ctype in ("frame", "clear", "animation", "idle"):
             if self._anim_task and not self._anim_task.done():
                 self._anim_task.cancel()
                 try:
@@ -178,6 +242,9 @@ class StatusLight:
             self._anim_task = asyncio.create_task(
                 self._run_animation(frames, fps, loop)
             )
+
+        elif ctype == "idle":
+            self._anim_task = asyncio.create_task(self._run_idle_animation())
 
         elif ctype == "pixel":
             idx = cmd.get("index", 0)

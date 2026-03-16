@@ -210,6 +210,8 @@ NAMED_ANIMATIONS = {
         ],
     },
     # snake (boustrophedon) fill
+    "idle": lambda fps, loop, color=None: {"type": "idle"},
+
     "snake": lambda fps, loop, color=None: {
         "type": "animation", "fps": fps, "loop": loop,
         "frames": [
