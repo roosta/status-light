@@ -118,6 +118,7 @@ class StatusLight:
         log.info("udev monitor started")
 
     def _udev_event(self, device):
+        log.info(f"udev event: action={device.action} node={device.device_node}")
         if device.device_node != self._port:
             return
         if device.action == 'remove' and self._connected:
@@ -303,6 +304,9 @@ class StatusLight:
         )
         os.chmod(SOCKET_PATH, 0o600)
         log.info(f"Daemon listening on {SOCKET_PATH}")
+
+        log.info("Init complete: starting idle animation")
+        asyncio.create_task(self._run_idle_animation())
 
         def _shutdown():
             log.info("Shutting down, please wait...")
