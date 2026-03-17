@@ -143,6 +143,7 @@ class StatusLight:
         log.info(f"Device appeared at {self._port}, reconnecting...")
         assert self._loop is not None
         await self._loop.run_in_executor(self.executor, self._try_connect)
+        self._anim_task = asyncio.create_task(self._run_idle_animation())
 
     async def _run_animation(self, frames, fps, loop):
         delay = 1.0 / max(fps, 0.1)
@@ -307,7 +308,7 @@ class StatusLight:
         log.info(f"Daemon listening on {SOCKET_PATH}")
 
         log.info("Init complete: starting idle animation")
-        asyncio.create_task(self._run_idle_animation())
+        self._anim_task = asyncio.create_task(self._run_idle_animation())
 
         def _shutdown():
             log.info("Shutting down, please wait...")
