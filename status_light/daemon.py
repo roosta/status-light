@@ -11,7 +11,8 @@ from concurrent.futures import ThreadPoolExecutor
 from status_light.assets import COLORS
 
 SOCKET_PATH = "/tmp/status-light.sock"
-SERIAL_PORT = "/dev/ttyUSB0"
+# SERIAL_PORT = "/dev/ttyUSB0"
+SERIAL_PORT = "/dev/arduino-status-light"
 BAUD_RATE = 115200
 LED_COUNT = 16
 
