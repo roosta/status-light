@@ -2,7 +2,10 @@
 import asyncio
 import json
 import logging
+import fcntl
+import termios
 import os
+import time
 import random
 import signal
 import pyudev
@@ -64,6 +67,7 @@ class StatusLight:
     def _try_connect(self):
         try:
             self.ser = serial.Serial(self._port, self._baud, timeout=1)
+            fcntl.ioctl(self.ser.fileno(), termios.TIOCEXCL)
             self._connected = True
             log.info(f"Serial connected: {self._port} @ {self._baud}")
         except serial.SerialException as e:
@@ -76,17 +80,22 @@ class StatusLight:
     def _write(self, data: bytes):
         if not self._connected or self.ser is None or not self.ser.is_open:
             return
-        try:
-            self.ser.write(data)
-        except serial.SerialException as e:
-            log.warning(f"Serial write failed (disconnected): {e}")
-            self._connected = False
+        for attempt in range(3):
             try:
-                self.ser.close()
-            except Exception:
-                pass
-            if self._loop:
-                self._loop.call_soon_threadsafe(self._cancel_animation)
+                self.ser.write(data)
+                return
+            except serial.SerialException as e:
+                log.debug(f"Serial write failed (attempt {attempt + 1}): {e}")
+                try:
+                    self.ser.close()
+                except Exception:
+                    pass
+                time.sleep(0.1)
+                try:
+                    self.ser.open()
+                    log.info("Serial reconnected")
+                except serial.SerialException:
+                    continue
 
     async def _send(self, data: bytes):
         assert self._loop is not None
