@@ -20,15 +20,12 @@ Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 struct Color { uint8_t r, g, b; };
 
-enum Mode { MODE_STOP, MODE_IDLE, MODE_NOTIFY, MODE_TEST };
+enum Mode { MODE_STOP, MODE_IDLE, MODE_NOTIFY };
 Mode mode = MODE_IDLE;          // default so a bare power-up shows the idle anim
 
 unsigned long lastTick = 0;
 
-// ── Idle animation ───────────────────────────────────────────────────────────
-// Random pixels fade in to a random palette color, hold, then fade out.
-
-const Color IDLE_PALETTE[] = {
+const Color PALETTE[] = {
   {255,   0,   0},  // red
   {160,  20,  30},  // pink
   { 10, 230,  30},  // green
@@ -40,7 +37,69 @@ const Color IDLE_PALETTE[] = {
   { 10, 100, 200},  // cyan
   {150, 200,   0},  // light-green
 };
-const uint8_t IDLE_PALETTE_SIZE = sizeof(IDLE_PALETTE) / sizeof(IDLE_PALETTE[0]);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Grid coordinate mapping
+//
+// Physical layout is a 4×4 panel, serpentine wiring: the data line starts at the
+// bottom-right, the bottom row runs right→left, then snakes upward alternating
+// direction each row, ending at the top-right.
+//
+// Coordinate convention: (x, y) with x=0 at the LEFT, y=0 at the TOP.
+//
+//        x=0  x=1  x=2  x=3
+//  y=0    12   13   14   15      (top row,    L→R, ends top-right)
+//  y=1    11   10    9    8
+//  y=2     4    5    6    7
+//  y=3     3    2    1    0      (bottom row, R→L, starts bottom-right)
+//
+// Use gridIndex(x, y) to address pixels by coordinate, and gridXY(i, x, y) to
+// go the other way. All other animations should use these so they never have to
+// know about the serpentine wiring.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const uint8_t GRID_W = 4;
+const uint8_t GRID_H = 4;
+
+// Physical (x, y) → strip index.  x: 0=left, y: 0=top.
+uint8_t gridIndex(uint8_t x, uint8_t y) {
+  uint8_t row = (GRID_H - 1) - y;            // row 0 = bottom (y=3) … row 3 = top
+  // Bottom row (row 0) runs right→left; the snake alternates each row up.
+  uint8_t pos = (row & 1) ? x : (GRID_W - 1 - x);
+  return row * GRID_W + pos;
+}
+
+// Strip index → physical (x, y).  Inverse of gridIndex().
+void gridXY(uint8_t i, uint8_t &x, uint8_t &y) {
+  uint8_t row = i / GRID_W;
+  uint8_t pos = i % GRID_W;
+  y = (GRID_H - 1) - row;
+  x = (row & 1) ? pos : (GRID_W - 1 - pos);
+}
+
+// Convenience: set a pixel by coordinate.
+inline void gridSet(uint8_t x, uint8_t y, uint32_t color) {
+  strip.setPixelColor(gridIndex(x, y), color);
+}
+
+// Sanity check: every index must round-trip through xy→index and back.
+// Call once in setup() during bring-up; remove afterwards.
+void gridSelfTest() {
+  for (uint8_t i = 0; i < LED_COUNT; i++) {
+    uint8_t x, y;
+    gridXY(i, x, y);
+    if (gridIndex(x, y) != i) {
+      Serial.print(F("Grid map FAIL at index "));
+      Serial.println(i);
+    }
+  }
+  Serial.println(F("Grid map self-test complete."));
+}
+
+// ── Idle animation ───────────────────────────────────────────────────────────
+// Random pixels fade in to a random palette color, hold, then fade out.
+
+const uint8_t PALETTE_SIZE = sizeof(PALETTE) / sizeof(PALETTE[0]);
 
 const uint8_t  IDLE_FADE_STEPS = 15;
 const uint8_t  IDLE_MAX_ACTIVE = 6;
@@ -75,7 +134,7 @@ void tickIdle() {
     }
     if (freeCount > 0 && active < IDLE_MAX_ACTIVE) {
       uint8_t idx = freeCells[random(freeCount)];
-      idleCells[idx].color     = IDLE_PALETTE[random(IDLE_PALETTE_SIZE)];
+      idleCells[idx].color     = PALETTE[random(PALETTE_SIZE)];
       idleCells[idx].phase     = PHASE_IN;
       idleCells[idx].step      = 0;
       idleCells[idx].holdTicks = random(15, 61);   // 1–4 s at 15 FPS
@@ -114,7 +173,7 @@ void tickIdle() {
 // Center-out pulse: the inner 2×2 grows brighter first; after a short delay the
 // outer ring grows too until the whole panel is lit; both hold briefly; the
 // outer ring fades out first; the inner square fades out last. Inner and outer
-// each pick a random IDLE_PALETTE color at the start of every cycle.
+// each pick a random PALETTE color at the start of every cycle.
 //
 // Timeline (seconds), all derived from these constants:
 const float NOTIFY_INNER_IN   = 1.45f;  // inner fade-in
@@ -127,34 +186,10 @@ const float NOTIFY_GAP         = 1.15f;  // gap before repeat
 
 const uint16_t NOTIFY_TICK_MS = 1000 / 60;   // ~60 FPS for smooth fades
 
-// Panel is serpentine: data starts at bottom-right, bottom row runs right→left,
-// snakes upward alternating direction, ending at top-right.
-//
-// Physical (x,y) → strip index, with y=0 at top:
-//        x=0  x=1  x=2  x=3
-//  y=0    12   13   14   15
-//  y=1    11   10    9    8
-//  y=2     4    5    6    7
-//  y=3     3    2    1    0
-//
-// Convert a strip index to its physical (x,y), then test the inner 2×2.
-void notifyXY(uint8_t i, uint8_t &x, uint8_t &y) {
-  uint8_t row = i / 4;                 // 0 = bottom pair start … 3 = top
-  uint8_t pos = i % 4;                 // position along that physical row
-  // Physical y: row 0 is the bottom (y=3), row 3 is the top (y=0).
-  y = 3 - row;
-  // Even physical rows from the start (bottom, y=3) run right→left;
-  // the snake alternates each row up.
-  // row 0 (y=3): right→left  → x = 3 - pos
-  // row 1 (y=2): left→right  → x = pos
-  // row 2 (y=1): right→left  → x = 3 - pos
-  // row 3 (y=0): left→right  → x = pos
-  x = (row & 1) ? pos : (3 - pos);
-}
-
+// Inner 2×2 are the center cells: x in {1,2}, y in {1,2}.
 bool notifyIsInner(uint8_t i) {
   uint8_t x, y;
-  notifyXY(i, x, y);
+  gridXY(i, x, y);
   return (x == 1 || x == 2) && (y == 1 || y == 2);
 }
 
@@ -190,15 +225,15 @@ float notifyEnvelope(float t, float inStart, float inDur,
 }
 
 void notifyPickColors() {
-  notifyInnerColor = IDLE_PALETTE[random(IDLE_PALETTE_SIZE)];
+  notifyInnerColor = PALETTE[random(PALETTE_SIZE)];
   // Ensure the outer color differs from the inner one.
   uint8_t outIdx;
   do {
-    outIdx = random(IDLE_PALETTE_SIZE);
-  } while (IDLE_PALETTE[outIdx].r == notifyInnerColor.r &&
-           IDLE_PALETTE[outIdx].g == notifyInnerColor.g &&
-           IDLE_PALETTE[outIdx].b == notifyInnerColor.b);
-  notifyOuterColor = IDLE_PALETTE[outIdx];
+    outIdx = random(PALETTE_SIZE);
+  } while (PALETTE[outIdx].r == notifyInnerColor.r &&
+           PALETTE[outIdx].g == notifyInnerColor.g &&
+           PALETTE[outIdx].b == notifyInnerColor.b);
+  notifyOuterColor = PALETTE[outIdx];
 }
 
 void resetNotify() {
@@ -239,12 +274,38 @@ void tickNotify() {
   strip.show();
 }
 
-// Quick test: light only the inner 2×2 white. Should show the center square.
-void notifyTestInner() {
+// Visual grid test: lights each (x,y) in coordinate order so you can confirm
+// the mapping matches the physical panel. Blocking + uses delay() on purpose —
+// it's a bring-up tool, run on demand via the "grid" serial command.
+void gridVisualTest() {
+  Serial.println(F("Grid visual test: expect a left-to-right, top-to-bottom raster."));
+  strip.clear();
+  strip.show();
+
+  // Sweep every coordinate in raster order: (0,0),(1,0),(2,0),(3,0),(0,1)...
+  for (uint8_t y = 0; y < GRID_H; y++) {
+    for (uint8_t x = 0; x < GRID_W; x++) {
+      strip.clear();
+      gridSet(x, y, strip.Color(30, 30, 30));   // dim white, one pixel
+      strip.show();
+      Serial.print(F("lighting (x="));
+      Serial.print(x); Serial.print(F(", y=")); Serial.print(y);
+      Serial.print(F(") -> index ")); Serial.println(gridIndex(x, y));
+      delay(350);
+    }
+  }
+
+  // Then light the inner 2×2 so you can confirm the notify split.
   strip.clear();
   for (uint8_t i = 0; i < LED_COUNT; i++)
-    if (notifyIsInner(i)) strip.setPixelColor(i, strip.Color(40, 40, 40));
+    if (notifyIsInner(i)) strip.setPixelColor(i, strip.Color(0, 30, 0));
   strip.show();
+  Serial.println(F("Inner 2x2 shown (green). Should be the center square."));
+  delay(1500);
+
+  strip.clear();
+  strip.show();
+  Serial.println(F("Grid visual test complete."));
 }
 
 // ── Serial command handling ──────────────────────────────────────────────────
@@ -256,23 +317,31 @@ void startMode(const String &name) {
   } else if (name == "notify") {
     mode = MODE_NOTIFY;
     resetNotify();
-  } else if (name == "test") {
-    mode = MODE_TEST;
-    notifyTestInner();
   }
 }
 
 void handleSerial() {
-  if (!Serial.available()) return;
-  String line = Serial.readStringUntil('\n');
-  line.trim();
-
-  if (line.startsWith("start:")) {
-    startMode(line.substring(6));
-  } else if (line == "stop") {
-    mode = MODE_STOP;
-    strip.clear();
-    strip.show();
+  static String buf;
+  while (Serial.available()) {
+    char ch = (char)Serial.read();
+    if (ch == '\n' || ch == '\r') {     // accept either terminator
+      buf.trim();
+      if (buf.length()) {
+        if (buf.startsWith("start:")) {
+          startMode(buf.substring(6));
+        } else if (buf == "stop") {
+          mode = MODE_STOP;
+          strip.clear();
+          strip.show();
+        } else if (buf == "test") {
+          // gridSelfTest();
+          // gridVisualTest();
+        }
+      }
+      buf = "";
+    } else {
+      buf += ch;
+    }
   }
 }
 
