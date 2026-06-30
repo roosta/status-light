@@ -133,6 +133,21 @@ See the [PlatformIO udev rules documentation](https://docs.platformio.org/en/lat
 for the full rule set.
 
 
+## Debugging
+
+When debugging firmware it is cumbersome to keep communicating via the daemon,
+as I often just want to test an arbitrary function.
+
+Disconnect the daemon, and use this command
+```sh
+pio device monitor
+```
+
+Check [platformio.ini](./platformio.ini) for line ending config.
+
+Then send commands over serial by typing commands, `start:[animation]`, `test`,
+`stop` etc
+
 ## License
 
 [MIT](LICENSE)
