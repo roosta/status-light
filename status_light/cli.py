@@ -3,9 +3,11 @@ import argparse
 import json
 import socket
 import sys
-from status_light.assets import NAMED_ICONS, NAMED_ANIMATIONS, COLORS
 
 SOCKET_PATH = "/tmp/status-light.sock"
+
+ANIMATIONS = ("idle", "notify")
+
 
 def send_command(cmd: dict) -> str:
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
@@ -18,82 +20,18 @@ def main():
     parser = argparse.ArgumentParser(prog="status-light", description="Control the LED matrix")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    # frame
-    fp = sub.add_parser("frame", help="Set a static frame / icon")
-    fp_src = fp.add_mutually_exclusive_group(required=True)
-    fp_src.add_argument("color", nargs="?", choices=COLORS.keys(),
-                        help="Solid color across all pixels")
-    fp_src.add_argument("--name", choices=NAMED_ICONS.keys(),
-                        help="Named icon")
-    fp_src.add_argument("--file", metavar="FILE",
-                        help="Path to JSON icon file ({\"pixels\": [...]})")
-    fp.add_argument("--brightness", type=float, default=1.0, metavar="0.0-1.0",
-                    help="Brightness override for solid-color mode")
+    sp = sub.add_parser("start", help="Start an animation")
+    sp.add_argument("animation", choices=ANIMATIONS, help="Animation to run")
 
-    # animation
-    ap = sub.add_parser("animation", help="Play an animation")
-    ap_src = ap.add_mutually_exclusive_group(required=True)
-    ap_src.add_argument("--name", choices=NAMED_ANIMATIONS.keys())
-    ap_src.add_argument("--file", metavar="FILE", help="Path to JSON animation file")
-    ap.add_argument("--fps", type=float, default=8)
-    ap.add_argument("--loop", action="store_true")
-    ap.add_argument("--color", choices=COLORS.keys(), default=None,
-                    help="Override the animation color (uses per-animation default if omitted)")
-
-    # pixel
-    pp = sub.add_parser("pixel", help="Set a single pixel")
-    pp.add_argument("index", type=int, help="Pixel index (0-15)")
-    pp.add_argument("color", choices=COLORS.keys(), help="Named color")
-    pp.add_argument("--brightness", type=float, default=1.0, metavar="0.0-1.0")
-
-    # clear
-    sub.add_parser("clear", help="Turn off all LEDs")
-
-    # status
+    sub.add_parser("stop", help="Stop the animation and clear the display")
     sub.add_parser("status", help="Check daemon connection to the LED matrix")
-
-    # raw (power-user escape hatch)
-    rp = sub.add_parser("raw", help="Send raw JSON command")
-    rp.add_argument("json")
 
     args = parser.parse_args()
 
-    if args.command == "clear":
-        cmd = {"type": "clear"}
-
-    elif args.command == "status":
-        cmd = {"type": "status"}
-
-    elif args.command == "frame":
-        if args.name:
-            cmd = {"type": "frame", "pixels": NAMED_ICONS[args.name]}
-        elif args.file:
-            with open(args.file) as f:
-                data = json.load(f)
-            cmd = {"type": "frame", "pixels": data["pixels"]}
-        else:
-            c = COLORS[args.color]
-            cmd = {"type": "frame", "pixels": [{**c, "brightness": args.brightness}]}
-
-    elif args.command == "animation":
-        if args.name:
-            cmd = NAMED_ANIMATIONS[args.name](args.fps, args.loop, args.color)
-        else:
-            with open(args.file) as f:
-                data = json.load(f)
-            cmd = {
-                "type": "animation",
-                "frames": data["frames"],
-                "fps": args.fps,
-                "loop": args.loop,
-            }
-
-    elif args.command == "pixel":
-        c = COLORS[args.color]
-        cmd = {"type": "pixel", "index": args.index, **c, "brightness": args.brightness}
-
-    elif args.command == "raw":
-        cmd = json.loads(args.json)
+    if args.command == "start":
+        cmd = {"type": "start", "name": args.animation}
+    else:
+        cmd = {"type": args.command}
 
     try:
         response = send_command(cmd)
@@ -106,7 +44,7 @@ def main():
             sys.exit(1)
         print(response)
     except (ConnectionRefusedError, FileNotFoundError):
-        print("error: daemon not running — start with: python daemon.py", file=sys.stderr)
+        print("error: daemon not running — start with: status-light-daemon", file=sys.stderr)
         sys.exit(1)
 
 
