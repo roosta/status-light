@@ -15,7 +15,7 @@ SERIAL_PORT = "/dev/arduino-status-light"
 BAUD_RATE = 115200
 
 # Animations run on the device firmware; the daemon only forwards mode commands.
-ANIMATIONS = ("idle", "notify")
+ANIMATIONS = ("idle", "notify", "test")
 DEFAULT_MODE = "idle"
 
 # Time to let the board finish its bootloader reset before we send a command.

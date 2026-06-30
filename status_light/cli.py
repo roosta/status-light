@@ -6,7 +6,7 @@ import sys
 
 SOCKET_PATH = "/tmp/status-light.sock"
 
-ANIMATIONS = ("idle", "notify")
+ANIMATIONS = ("idle", "notify", "test")
 
 
 def send_command(cmd: dict) -> str:

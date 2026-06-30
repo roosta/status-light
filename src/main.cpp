@@ -20,7 +20,7 @@ Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 struct Color { uint8_t r, g, b; };
 
-enum Mode { MODE_STOP, MODE_IDLE, MODE_NOTIFY };
+enum Mode { MODE_STOP, MODE_IDLE, MODE_NOTIFY, MODE_TEST };
 Mode mode = MODE_IDLE;          // default so a bare power-up shows the idle anim
 
 unsigned long lastTick = 0;
@@ -111,28 +111,140 @@ void tickIdle() {
 }
 
 // ── Notify animation ─────────────────────────────────────────────────────────
-// TODO: placeholder — replace with the real notification animation. For now it
-// is a slow green pulse across all pixels so the pipeline is testable.
+// Center-out pulse: the inner 2×2 grows brighter first; after a short delay the
+// outer ring grows too until the whole panel is lit; both hold briefly; the
+// outer ring fades out first; the inner square fades out last. Inner and outer
+// each pick a random IDLE_PALETTE color at the start of every cycle.
+//
+// Timeline (seconds), all derived from these constants:
+const float NOTIFY_INNER_IN   = 1.45f;  // inner fade-in
+const float NOTIFY_OUTER_DELAY= 0.85f;  // outer start delay
+const float NOTIFY_OUTER_IN   = 1.50f;  // outer fade-in
+const float NOTIFY_HOLD        = 0.70f;  // hold at full
+const float NOTIFY_OUTER_OUT  = 1.25f;  // outer fade-out
+const float NOTIFY_INNER_OUT  = 1.80f;  // inner fade-out
+const float NOTIFY_GAP         = 1.15f;  // gap before repeat
 
-const Color    NOTIFY_COLOR   = {10, 230, 30};   // green
-const uint8_t  NOTIFY_STEPS   = 30;
-const uint16_t NOTIFY_TICK_MS = 1000 / 30;
-uint8_t notifyStep = 0;
-int8_t  notifyDir  = 1;
+const uint16_t NOTIFY_TICK_MS = 1000 / 60;   // ~60 FPS for smooth fades
+
+// Panel is serpentine: data starts at bottom-right, bottom row runs right→left,
+// snakes upward alternating direction, ending at top-right.
+//
+// Physical (x,y) → strip index, with y=0 at top:
+//        x=0  x=1  x=2  x=3
+//  y=0    12   13   14   15
+//  y=1    11   10    9    8
+//  y=2     4    5    6    7
+//  y=3     3    2    1    0
+//
+// Convert a strip index to its physical (x,y), then test the inner 2×2.
+void notifyXY(uint8_t i, uint8_t &x, uint8_t &y) {
+  uint8_t row = i / 4;                 // 0 = bottom pair start … 3 = top
+  uint8_t pos = i % 4;                 // position along that physical row
+  // Physical y: row 0 is the bottom (y=3), row 3 is the top (y=0).
+  y = 3 - row;
+  // Even physical rows from the start (bottom, y=3) run right→left;
+  // the snake alternates each row up.
+  // row 0 (y=3): right→left  → x = 3 - pos
+  // row 1 (y=2): left→right  → x = pos
+  // row 2 (y=1): right→left  → x = 3 - pos
+  // row 3 (y=0): left→right  → x = pos
+  x = (row & 1) ? pos : (3 - pos);
+}
+
+bool notifyIsInner(uint8_t i) {
+  uint8_t x, y;
+  notifyXY(i, x, y);
+  return (x == 1 || x == 2) && (y == 1 || y == 2);
+}
+
+unsigned long notifyStartMs = 0;
+Color notifyInnerColor;
+Color notifyOuterColor;
+
+// Derived timeline points (computed once in resetNotify).
+float notifyFullAt, notifyOutStart, notifyOuterOutEnd, notifyInnerOutEnd, notifyCycle;
+
+// Gamma table for perceptually smooth fades.
+uint8_t notifyGamma(float v) {                 // v is 0..1 linear-perceived
+  if (v <= 0.0f) return 0;
+  if (v >= 1.0f) return 255;
+  return (uint8_t)(powf(v, 2.2f) * 255.0f + 0.5f);
+}
+
+// Smoothstep easing: 0→1 with eased ends.
+float notifySmooth(float t) {
+  if (t <= 0.0f) return 0.0f;
+  if (t >= 1.0f) return 1.0f;
+  return t * t * (3.0f - 2.0f * t);
+}
+
+// Brightness 0..1 for a layer given its in/out start times and durations.
+float notifyEnvelope(float t, float inStart, float inDur,
+                              float outStart, float outDur) {
+  if (t < inStart) return 0.0f;
+  if (t < inStart + inDur) return notifySmooth((t - inStart) / inDur);
+  if (t < outStart) return 1.0f;
+  if (t < outStart + outDur) return 1.0f - notifySmooth((t - outStart) / outDur);
+  return 0.0f;
+}
+
+void notifyPickColors() {
+  notifyInnerColor = IDLE_PALETTE[random(IDLE_PALETTE_SIZE)];
+  // Ensure the outer color differs from the inner one.
+  uint8_t outIdx;
+  do {
+    outIdx = random(IDLE_PALETTE_SIZE);
+  } while (IDLE_PALETTE[outIdx].r == notifyInnerColor.r &&
+           IDLE_PALETTE[outIdx].g == notifyInnerColor.g &&
+           IDLE_PALETTE[outIdx].b == notifyInnerColor.b);
+  notifyOuterColor = IDLE_PALETTE[outIdx];
+}
 
 void resetNotify() {
-  notifyStep = 0;
-  notifyDir  = 1;
+  // Build the timeline once (both layers start fading out together; inner ends last).
+  float innerInEnd = NOTIFY_INNER_IN;
+  float outerInEnd = NOTIFY_OUTER_DELAY + NOTIFY_OUTER_IN;
+  notifyFullAt      = max(innerInEnd, outerInEnd);
+  notifyOutStart    = notifyFullAt + NOTIFY_HOLD;
+  notifyOuterOutEnd = notifyOutStart + NOTIFY_OUTER_OUT;
+  notifyInnerOutEnd = notifyOutStart + NOTIFY_INNER_OUT;
+  notifyCycle       = max(notifyOuterOutEnd, notifyInnerOutEnd) + NOTIFY_GAP;
+
+  notifyStartMs = millis();
+  notifyPickColors();
 }
 
 void tickNotify() {
-  float br = (float)notifyStep / NOTIFY_STEPS;
-  for (uint8_t i = 0; i < LED_COUNT; i++)
-    strip.setPixelColor(i, strip.Color(NOTIFY_COLOR.r * br, NOTIFY_COLOR.g * br, NOTIFY_COLOR.b * br));
-  strip.show();
+  float t = (millis() - notifyStartMs) / 1000.0f;
+  if (t >= notifyCycle) {            // new cycle: reroll colors, reset clock
+    notifyStartMs = millis();
+    notifyPickColors();
+    t = 0.0f;
+  }
 
-  notifyStep += notifyDir;
-  if (notifyStep == NOTIFY_STEPS || notifyStep == 0) notifyDir = -notifyDir;
+  float innerB = notifyEnvelope(t, 0.0f,                NOTIFY_INNER_IN,
+                                   notifyOutStart,       NOTIFY_INNER_OUT);
+  float outerB = notifyEnvelope(t, NOTIFY_OUTER_DELAY,  NOTIFY_OUTER_IN,
+                                   notifyOutStart,       NOTIFY_OUTER_OUT);
+
+  for (uint8_t i = 0; i < LED_COUNT; i++) {
+    const Color &col = notifyIsInner(i) ? notifyInnerColor : notifyOuterColor;
+    float br = notifyIsInner(i) ? innerB : outerB;
+    strip.setPixelColor(i, strip.Color(
+      notifyGamma(col.r / 255.0f * br),
+      notifyGamma(col.g / 255.0f * br),
+      notifyGamma(col.b / 255.0f * br)));
+  }
+  strip.show();
+}
+
+// Quick test: light only the inner 2×2 white. Should show the center square.
+void notifyTestInner() {
+  strip.clear();
+  for (uint8_t i = 0; i < LED_COUNT; i++)
+    if (notifyIsInner(i)) strip.setPixelColor(i, strip.Color(40, 40, 40));
+  strip.show();
 }
 
 // ── Serial command handling ──────────────────────────────────────────────────
@@ -144,6 +256,9 @@ void startMode(const String &name) {
   } else if (name == "notify") {
     mode = MODE_NOTIFY;
     resetNotify();
+  } else if (name == "test") {
+    mode = MODE_TEST;
+    notifyTestInner();
   }
 }
 
