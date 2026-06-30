@@ -97,7 +97,10 @@ void gridSelfTest() {
 }
 
 // ── Idle animation ───────────────────────────────────────────────────────────
-// Random pixels fade in to a random palette color, hold, then fade out.
+// Random cells fade in to a random palette color, hold, then fade out.
+// State is stored per (x, y) coordinate and rendered through gridSet(), so the
+// wiring layout lives only in gridIndex(). This makes spatial effects (drift,
+// neighbor-aware fades, ripples) straightforward to add later.
 
 const uint8_t PALETTE_SIZE = sizeof(PALETTE) / sizeof(PALETTE[0]);
 
@@ -112,59 +115,76 @@ struct IdleCell {
   uint8_t holdTicks;
   Color   color;
 };
-IdleCell idleCells[LED_COUNT];
+
+// 2-D grid of cells, addressed [y][x] to mirror the coordinate convention.
+IdleCell idleGrid[GRID_H][GRID_W];
 int8_t   idleSpawnCooldown = 0;
 
 void resetIdle() {
-  for (uint8_t i = 0; i < LED_COUNT; i++) idleCells[i].phase = PHASE_OFF;
+  for (uint8_t y = 0; y < GRID_H; y++)
+    for (uint8_t x = 0; x < GRID_W; x++)
+      idleGrid[y][x].phase = PHASE_OFF;
   idleSpawnCooldown = 0;
   strip.clear();
   strip.show();
 }
 
 void tickIdle() {
-  // Spawn a new cell on a free pixel, respecting the cooldown and active cap.
+  // Spawn a new cell on a free coordinate, respecting cooldown and active cap.
   if (idleSpawnCooldown <= 0) {
-    int8_t  freeCells[LED_COUNT];
+    uint8_t freeX[GRID_W * GRID_H];
+    uint8_t freeY[GRID_W * GRID_H];
     uint8_t freeCount = 0;
     uint8_t active    = 0;
-    for (uint8_t i = 0; i < LED_COUNT; i++) {
-      if (idleCells[i].phase != PHASE_OFF) active++;
-      else freeCells[freeCount++] = i;
+    for (uint8_t y = 0; y < GRID_H; y++) {
+      for (uint8_t x = 0; x < GRID_W; x++) {
+        if (idleGrid[y][x].phase != PHASE_OFF) {
+          active++;
+        } else {
+          freeX[freeCount] = x;
+          freeY[freeCount] = y;
+          freeCount++;
+        }
+      }
     }
     if (freeCount > 0 && active < IDLE_MAX_ACTIVE) {
-      uint8_t idx = freeCells[random(freeCount)];
-      idleCells[idx].color     = PALETTE[random(PALETTE_SIZE)];
-      idleCells[idx].phase     = PHASE_IN;
-      idleCells[idx].step      = 0;
-      idleCells[idx].holdTicks = random(15, 61);   // 1–4 s at 15 FPS
-      idleSpawnCooldown        = random(5, 21);    // 0.3–1.3 s
+      uint8_t pick = random(freeCount);
+      IdleCell &c = idleGrid[freeY[pick]][freeX[pick]];
+      c.color     = PALETTE[random(PALETTE_SIZE)];
+      c.phase     = PHASE_IN;
+      c.step      = 0;
+      c.holdTicks = random(15, 61);   // 1–4 s at 15 FPS
+      idleSpawnCooldown = random(5, 21);    // 0.3–1.3 s
     }
   }
   idleSpawnCooldown--;
 
   // Advance phases.
-  for (uint8_t i = 0; i < LED_COUNT; i++) {
-    IdleCell &c = idleCells[i];
-    if (c.phase == PHASE_IN) {
-      c.step++;
-      if (c.step > IDLE_FADE_STEPS) { c.phase = PHASE_HOLD; c.step = 0; }
-    } else if (c.phase == PHASE_HOLD) {
-      c.step++;
-      if (c.step >= c.holdTicks) { c.phase = PHASE_OUT; c.step = IDLE_FADE_STEPS; }
-    } else if (c.phase == PHASE_OUT) {
-      if (c.step == 0) c.phase = PHASE_OFF;
-      else c.step--;
+  for (uint8_t y = 0; y < GRID_H; y++) {
+    for (uint8_t x = 0; x < GRID_W; x++) {
+      IdleCell &c = idleGrid[y][x];
+      if (c.phase == PHASE_IN) {
+        c.step++;
+        if (c.step > IDLE_FADE_STEPS) { c.phase = PHASE_HOLD; c.step = 0; }
+      } else if (c.phase == PHASE_HOLD) {
+        c.step++;
+        if (c.step >= c.holdTicks) { c.phase = PHASE_OUT; c.step = IDLE_FADE_STEPS; }
+      } else if (c.phase == PHASE_OUT) {
+        if (c.step == 0) c.phase = PHASE_OFF;
+        else c.step--;
+      }
     }
   }
 
-  // Render.
-  for (uint8_t i = 0; i < LED_COUNT; i++) {
-    IdleCell &c = idleCells[i];
-    float br = 0.0f;
-    if (c.phase == PHASE_IN || c.phase == PHASE_OUT) br = (float)c.step / IDLE_FADE_STEPS;
-    else if (c.phase == PHASE_HOLD)                  br = 1.0f;
-    strip.setPixelColor(i, strip.Color(c.color.r * br, c.color.g * br, c.color.b * br));
+  // Render through coordinate mapping.
+  for (uint8_t y = 0; y < GRID_H; y++) {
+    for (uint8_t x = 0; x < GRID_W; x++) {
+      IdleCell &c = idleGrid[y][x];
+      float br = 0.0f;
+      if (c.phase == PHASE_IN || c.phase == PHASE_OUT) br = (float)c.step / IDLE_FADE_STEPS;
+      else if (c.phase == PHASE_HOLD)                  br = 1.0f;
+      gridSet(x, y, strip.Color(c.color.r * br, c.color.g * br, c.color.b * br));
+    }
   }
   strip.show();
 }
